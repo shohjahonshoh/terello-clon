@@ -4,7 +4,7 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { FaTrashAlt, FaEdit, FaSave, FaEllipsisV } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const TodayChallenges = () => {
+const MonthlyTasks = () => {
   const user = useSelector((state) => state.auth.user);
   const [tasks, setTasks] = useState({
     todo: [],
@@ -15,14 +15,43 @@ const TodayChallenges = () => {
   const [editTaskId, setEditTaskId] = useState(null);
   const [editTaskTitle, setEditTaskTitle] = useState('');
   const [showMenu, setShowMenu] = useState(null);
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const today = new Date();
+    today.setDate(1); // Set to the first day of the current month
+    return today;
+  });
   const navigate = useNavigate();
   const location = useLocation();
-  const today = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
 
+  // Function to navigate to the previous month
+  const goToPreviousMonth = () => {
+    setCurrentMonth((prevMonth) => {
+      const newMonth = new Date(prevMonth);
+      newMonth.setMonth(newMonth.getMonth() - 1);
+      newMonth.setDate(1); // Ensure it's set to the first day of the new month
+      return newMonth;
+    });
+  };
+
+  // Function to navigate to the next month
+  const goToNextMonth = () => {
+    setCurrentMonth((prevMonth) => {
+      const newMonth = new Date(prevMonth);
+      newMonth.setMonth(newMonth.getMonth() + 1);
+      newMonth.setDate(1); // Ensure it's set to the first day of the new month
+      return newMonth;
+    });
+  };
+
+  // Function to format the display of the current month
+  const formatCurrentMonth = () => {
+    return currentMonth.toLocaleDateString('en-GB', {
+      month: 'long',
+      year: 'numeric',
+    });
+  };
+
+  // Fetch tasks whenever the currentMonth changes
   useEffect(() => {
     const fetchTasks = async () => {
       const token = localStorage.getItem('access_token');
@@ -48,22 +77,39 @@ const TodayChallenges = () => {
           throw new Error('Failed to fetch tasks');
         }
         const data = await response.json();
+
+        // Define the start and end of the selected month
+        const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+
+        // Filter tasks that fall within the selected month
+        const filteredTasks = data.filter((task) => {
+          const taskDate = new Date(task.due_date);
+          return taskDate >= monthStart && taskDate <= monthEnd;
+        });
+
         setTasks({
-          todo: data.filter((task) => task.status === 'pending'),
-          inProcess: data.filter((task) => task.status === 'inProcess'),
-          done: data.filter((task) => task.status === 'completed'),
+          todo: filteredTasks.filter((task) => task.status === 'pending'),
+          inProcess: filteredTasks.filter((task) => task.status === 'inProcess'),
+          done: filteredTasks.filter((task) => task.status === 'completed'),
         });
       } catch (error) {
         console.error('Error fetching tasks:', error.message);
       }
     };
     fetchTasks();
-  }, [navigate]);
+  }, [currentMonth, navigate]);
 
+  // Function to add a new task
   const addTask = async () => {
     const token = localStorage.getItem('access_token');
     if (newTask.trim()) {
       try {
+        // Set due_date to the first day of the selected month
+        const dueDate = new Date(currentMonth);
+        dueDate.setDate(1);
+        const formattedDueDate = dueDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
+
         const response = await fetch('http://95.130.227.110:8000/api/todos/', {
           method: 'POST',
           headers: {
@@ -73,10 +119,9 @@ const TodayChallenges = () => {
           body: JSON.stringify({
             title: newTask,
             status: "pending",
-            due_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+            due_date: formattedDueDate,
             created_date: new Date().toISOString().split('T')[0],
-            is_special_day: true
-
+            is_special_day: false,
           }),
         });
         if (!response.ok) throw new Error('Failed to add task');
@@ -91,26 +136,28 @@ const TodayChallenges = () => {
       }
     }
   };
+
+  // Function to handle drag and drop
   const onDragEnd = async (result) => {
     if (!result.destination) return;
-  
+
     const { source, destination } = result;
-  
+
     if (
       source.droppableId === destination.droppableId &&
       source.index === destination.index
     ) {
       return;
     }
-  
+
     const sourceColumn = Array.from(tasks[source.droppableId]);
     const destColumn = Array.from(tasks[destination.droppableId]);
     const [movedTask] = sourceColumn.splice(source.index, 1);
-  
+
     // Update the task's status in the backend when moved between columns
     try {
       const token = localStorage.getItem("access_token");
-  
+
       let newStatus = destination.droppableId;
       if (destination.droppableId === "todo") {
         newStatus = "pending";
@@ -119,7 +166,7 @@ const TodayChallenges = () => {
       } else if (destination.droppableId === "done") {
         newStatus = "completed";
       }
-  
+
       const response = await fetch(
         `http://95.130.227.110:8000/api/todos/${movedTask.id}/`,
         {
@@ -132,12 +179,13 @@ const TodayChallenges = () => {
         }
       );
       if (!response.ok) throw new Error("Failed to update task status");
-  
+
       movedTask.status = newStatus; // Update the task's status in the frontend
     } catch (error) {
       console.error("Error updating task status:", error.message);
+      return; // Exit if there's an error updating the backend
     }
-  
+
     // Update the columns in the frontend
     destColumn.splice(destination.index, 0, movedTask);
     setTasks((prevTasks) => ({
@@ -146,33 +194,14 @@ const TodayChallenges = () => {
       [destination.droppableId]: destColumn,
     }));
   };
-  
 
+  // Function to start editing a task
   const startEditing = (task) => {
     setEditTaskId(task.id);
     setEditTaskTitle(task.title);
   };
-  const deleteTask = async (taskId, column) => {
-    const token = localStorage.getItem('access_token');
-    try {
-      const response = await fetch(`http://95.130.227.110:8000/api/todos/${taskId}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) throw new Error('Topshiriqni o\'chirishda xatolik yuz berdi');
-      setTasks((prevTasks) => ({
-        ...prevTasks,
-        [column]: prevTasks[column].filter((task) => task.id !== taskId),
-      }));
-    } catch (error) {
-      console.error('Topshiriqni o\'chirishda xatolik:', error.message);
-    }
-  };
-  
 
+  // Function to save the edited task
   const saveTask = async (taskId, column) => {
     const token = localStorage.getItem('access_token');
     try {
@@ -194,15 +223,39 @@ const TodayChallenges = () => {
       setEditTaskId(null);
       setEditTaskTitle('');
     } catch (error) {
-      console.error('Error updating task:', error);
+      console.error('Error updating task:', error.message);
     }
   };
 
+  // Function to delete a task
+  const deleteTask = async (taskId, column) => {
+    const token = localStorage.getItem('access_token');
+    try {
+      const response = await fetch(`http://95.130.227.110:8000/api/todos/${taskId}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to delete task');
+      setTasks((prevTasks) => ({
+        ...prevTasks,
+        [column]: prevTasks[column].filter((task) => task.id !== taskId),
+      }));
+    } catch (error) {
+      console.error('Error deleting task:', error.message);
+    }
+  };
+
+  // Function to move a task from one column to another via the menu
   const moveTask = (taskId, fromColumn, toColumn) => {
     setTasks((prevTasks) => {
       const sourceTasks = Array.from(prevTasks[fromColumn]);
       const targetTasks = Array.from(prevTasks[toColumn]);
       const taskIndex = sourceTasks.findIndex((task) => task.id === taskId);
+      if (taskIndex === -1) return prevTasks; // Task not found
+
       const [movedTask] = sourceTasks.splice(taskIndex, 1);
       movedTask.status = toColumn;
       targetTasks.push(movedTask);
@@ -218,9 +271,26 @@ const TodayChallenges = () => {
 
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
+      {/* Header with Month Navigation */}
       <header className="bg-blue-800 text-white py-4 px-6 flex justify-between items-center">
-        <h1 className="text-2xl">📝 Daily Tasks</h1>
-        <p className="font-semibold text-lg">{today}</p>
+        <h1 className="text-2xl">📅 Monthly Tasks</h1>
+        <div className="flex items-center">
+          <button
+            onClick={goToPreviousMonth}
+            className="text-white px-2 py-1 rounded-l bg-blue-700 hover:bg-blue-600"
+          >
+            &lt; Previous Month
+          </button>
+          <p className="font-semibold text-lg mx-4">
+            {formatCurrentMonth()}
+          </p>
+          <button
+            onClick={goToNextMonth}
+            className="text-white px-2 py-1 rounded-r bg-blue-700 hover:bg-blue-600"
+          >
+            Next Month &gt;
+          </button>
+        </div>
         <div className="flex items-center space-x-4">
           <p>{user?.username || 'User Name'}</p>
           <img
@@ -230,11 +300,19 @@ const TodayChallenges = () => {
           />
         </div>
       </header>
+
+      {/* Main Content */}
       <div className="flex flex-1">
+        {/* Sidebar Navigation */}
         <aside className="w-1/4 bg-white p-4 border-r border-gray-300">
           <ul>
-            {[{ name: "Today's challenges", path: '/today-challenges' }, { name: 'Weekly Tasks', path: '/weekly-tasks' }, { name: 'Monthly Tasks', path: '/monthly-tasks' }, { name: '+ Add Special Day', path: '/add-special-day' }].map((item) => (
-              <li key={item.path}>
+            {[
+              { name: "Today's Challenges", path: '/today-challenges' },
+              { name: 'Weekly Tasks', path: '/weekly-tasks' },
+              { name: 'Monthly Tasks', path: '/monthly-tasks' },
+              { name: '+ Add Special Day', path: '/add-special-day' }
+            ].map((item) => (
+              <li key={item.path} className='mb-2 bg-gray-100 hover:bg-gray-300 drop-shadow-md rounded-md text-2xl cursor-pointer font-semibold hover:text-blue-500'>
                 <a
                   href={item.path}
                   className={`text-sm ${location.pathname === item.path ? 'font-bold' : ''}`}
@@ -246,33 +324,37 @@ const TodayChallenges = () => {
           </ul>
         </aside>
 
-
-        <main className="flex-1 p-4">
-          <h2 className="text-xl font-semibold mb-4">Your Tasks</h2>
+        {/* Tasks Section */}
+        <main className="flex-1 p-4 overflow-auto">
+          <h2 className="text-xl font-semibold mb-4">Monthly Tasks</h2>
           <div className="mb-4 flex justify-between">
             <input
               type="text"
               value={newTask}
               onChange={(e) => setNewTask(e.target.value)}
-              className="border border-gray-400 px-4 py-2 rounded-lg w-3/4"
-              placeholder="Add a new task"
+              className="border border-gray-400 bg-white px-4 py-2 rounded-lg w-3/4"
+              placeholder="Add a new monthly task"
             />
-            <button onClick={addTask} className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg">
+            <button
+              onClick={addTask}
+              className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500"
+            >
               Add Task
             </button>
           </div>
 
+          {/* Drag and Drop Context */}
           <DragDropContext onDragEnd={onDragEnd}>
-            <div className="flex justify-between">
+            <div className="flex space-x-4">
               {['todo', 'inProcess', 'done'].map((column) => (
-                <div key={column} className="w-1/3 p-2">
-                  <h3 className="text-lg font-semibold mb-2 capitalize">{column}</h3>
+                <div key={column} className="w-1/3">
+                  <h3 className="text-lg font-semibold mb-2 capitalize">{column.replace('inProcess', 'In Process')}</h3>
                   <Droppable droppableId={column}>
                     {(provided) => (
                       <div
                         {...provided.droppableProps}
                         ref={provided.innerRef}
-                        className="bg-gray-50 rounded-lg p-4"
+                        className="bg-gray-50 rounded-lg p-4 min-h-[400px]"
                       >
                         {tasks[column].map((task, index) => (
                           <Draggable key={task.id} draggableId={task.id.toString()} index={index}>
@@ -282,9 +364,12 @@ const TodayChallenges = () => {
                                 {...provided.dragHandleProps}
                                 ref={provided.innerRef}
                                 className={`p-4 rounded-lg shadow-md mb-4 flex justify-between items-center ${
-                                  column === 'done' ? 'bg-gray-300 text-red-600' : column === 'inProcess' ? 'bg-blue-100' : 'bg-white'
+                                  column === 'done' ? 'bg-gray-400 text-white' :
+                                  column === 'inProcess' ? 'bg-blue-100' :
+                                  'bg-white'
                                 }`}
                               >
+                                {/* Task Title or Edit Input */}
                                 {editTaskId === task.id ? (
                                   <input
                                     value={editTaskTitle}
@@ -294,44 +379,57 @@ const TodayChallenges = () => {
                                 ) : (
                                   <span>{task.title}</span>
                                 )}
-                                <div className="flex items-center space-x-2">
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center space-x-2 relative">
+                                  {/* Edit or Save Button */}
                                   {editTaskId === task.id ? (
                                     <button
                                       onClick={() => saveTask(task.id, column)}
                                       className="text-green-600"
+                                      title="Save"
                                     >
                                       <FaSave />
                                     </button>
                                   ) : (
-                                    <button onClick={() => startEditing(task)} className="text-blue-600">
+                                    <button
+                                      onClick={() => startEditing(task)}
+                                      className="text-blue-600"
+                                      title="Edit"
+                                    >
                                       <FaEdit />
                                     </button>
                                   )}
+
+                                  {/* Move Task Menu */}
                                   <button
                                     onClick={() => setShowMenu(task.id === showMenu ? null : task.id)}
                                     className="text-gray-600"
+                                    title="More Options"
                                   >
                                     <FaEllipsisV />
                                   </button>
                                   {showMenu === task.id && (
-                                    <div className="absolute bg-white border rounded shadow-md mt-2">
+                                    <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-md z-10">
                                       {['todo', 'inProcess', 'done'].map((targetColumn) =>
                                         targetColumn !== column ? (
                                           <button
                                             key={targetColumn}
                                             onClick={() => moveTask(task.id, column, targetColumn)}
-
-                                            className="block px-4 py-2 text-left w-full text-sm hover:bg-gray-100"
+                                            className="block w-full text-left px-4 py-2 text-blue-500 text-sm hover:bg-gray-100"
                                           >
-                                            Move to {targetColumn}
+                                            Move to {targetColumn.replace('inProcess', 'In Process')}
                                           </button>
                                         ) : null
                                       )}
                                     </div>
                                   )}
+
+                                  {/* Delete Button */}
                                   <button
                                     onClick={() => deleteTask(task.id, column)}
                                     className="text-red-600"
+                                    title="Delete"
                                   >
                                     <FaTrashAlt />
                                   </button>
@@ -354,4 +452,4 @@ const TodayChallenges = () => {
   );
 };
 
-export default TodayChallenges;
+export default MonthlyTasks;
