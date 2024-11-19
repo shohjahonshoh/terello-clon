@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
@@ -155,6 +157,10 @@ const WeeklyTasks = () => {
     const destColumn = Array.from(tasks[destination.droppableId]);
     const [movedTask] = sourceColumn.splice(source.index, 1);
   
+<<<<<<< Updated upstream
+=======
+    // Update the task's status in the backend when moved between columns
+>>>>>>> Stashed changes
     try {
       const token = localStorage.getItem("access_token");
   
@@ -180,11 +186,19 @@ const WeeklyTasks = () => {
       );
       if (!response.ok) throw new Error("Failed to update task status");
   
+<<<<<<< Updated upstream
       movedTask.status = newStatus; 
+=======
+      movedTask.status = newStatus; // Update the task's status in the frontend
+>>>>>>> Stashed changes
     } catch (error) {
       console.error("Error updating task status:", error.message);
     }
   
+<<<<<<< Updated upstream
+=======
+    // Update the columns in the frontend
+>>>>>>> Stashed changes
     destColumn.splice(destination.index, 0, movedTask);
     setTasks((prevTasks) => ({
       ...prevTasks,
@@ -194,6 +208,10 @@ const WeeklyTasks = () => {
   };
   
   
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   const startEditing = (task) => {
     setEditTaskId(task.id);
     setEditTaskTitle(task.title);
@@ -224,6 +242,10 @@ const WeeklyTasks = () => {
     }
   };
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   const deleteTask = async (taskId, column) => {
     const token = localStorage.getItem('access_token');
     try {
@@ -285,6 +307,10 @@ const WeeklyTasks = () => {
   ))}
 </div>
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
           <button
             onClick={goToNextWeek}
             className="text-white px-2 py-1  rounded-r"

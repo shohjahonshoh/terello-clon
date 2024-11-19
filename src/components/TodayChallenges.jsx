@@ -101,7 +101,6 @@ const TodayChallenges = () => {
     }
   };
 
-
   const onDragEnd = async (result) => {
     if (!result.destination) return;
   
@@ -227,7 +226,6 @@ const TodayChallenges = () => {
     setShowMenu(null);
   };
 
-
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
       <header className="bg-blue-800 text-white py-4 px-6 flex justify-between items-center">
@@ -273,7 +271,6 @@ const TodayChallenges = () => {
               Add Task
             </button>
           </div>
-
 
           <DragDropContext onDragEnd={onDragEnd}>
             <div className="flex justify-between">
@@ -333,7 +330,6 @@ const TodayChallenges = () => {
                                           <button
                                             key={targetColumn}
                                             onClick={() => moveTask(task.id, column, targetColumn)}
-
 
                                             className="block px-4 py-2 text-left w-full text-sm hover:bg-gray-100"
                                           >
