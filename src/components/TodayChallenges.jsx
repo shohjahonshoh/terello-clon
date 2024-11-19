@@ -6,11 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const TodayChallenges = () => {
   const user = useSelector((state) => state.auth.user);
-  const [tasks, setTasks] = useState({
-    todo: [],
-    inProcess: [],
-    done: [],
-  });
+  const [tasks, setTasks] = useState({ todo: [], inProcess: [], done: [] });
   const [newTask, setNewTask] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [specialDay, setSpecialDay] = useState({ month: '', day: '', task: '' });
@@ -22,14 +18,12 @@ const TodayChallenges = () => {
     year: 'numeric',
   });
 
-  // Fetch tasks on mount
   useEffect(() => {
     const fetchTasks = async () => {
       const token = localStorage.getItem('access_token');
-      
       if (!token) {
         console.error('No token found, please log in');
-        navigate('/login'); // Redirect to login page if no token
+        navigate('/login');
         return;
       }
 
@@ -45,7 +39,7 @@ const TodayChallenges = () => {
         if (!response.ok) {
           if (response.status === 401) {
             console.error('Unauthorized access, please log in again');
-            navigate('/login'); // Navigate to login on unauthorized
+            navigate('/login');
             return;
           }
           throw new Error('Failed to fetch tasks');
@@ -63,48 +57,50 @@ const TodayChallenges = () => {
     };
 
     fetchTasks();
-  }, [navigate]); // Make sure navigate is included in the dependency array
+  }, [navigate]);
 
-  // Add new task
   const addTask = async () => {
     const token = localStorage.getItem('access_token');
-    if (newTask.trim()) {
-      try {
-        const response = await fetch('http://95.130.227.110:8000/api/todos/', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'timeout': 10000,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: newTask,
-            status: 'todo',
-            due_date: null,
-            is_special_day: false,
-          }),
-        });
+    if (!newTask.trim()) return;
+    
+    if (!user || !user.id) {
+      console.error('User ID not found. Make sure you are logged in.');
+      return;
+    }
 
+    try {
+      const response = await fetch('http://95.130.227.110:8000/api/todos/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user: user.id,
+          title: newTask,
+          status: 'todo',
+          due_date: null,
+          created_date: new Date().toISOString(),
+          is_special_day: false,
+        }),
+      });
 
-        if (!response.ok) {
-          const errorMessage = await response.text();
-          throw new Error(`Failed to add task: ${response.status} - ${errorMessage}`);
-        }
-
-        const createdTask = await response.json();
-        
-        setTasks((prevTasks) => ({
-          ...prevTasks,
-          todo: [...prevTasks.todo, createdTask],
-        }));
-        setNewTask('');
-      } catch (error) {
-        console.error('Error adding task:', error.message);
+      if (!response.ok) {
+        const errorMessage = await response.text();
+        throw new Error(`Failed to add task: ${response.status} - ${errorMessage}`);
       }
+
+      const createdTask = await response.json();
+      setTasks((prevTasks) => ({
+        ...prevTasks,
+        todo: [...prevTasks.todo, createdTask],
+      }));
+      setNewTask('');
+    } catch (error) {
+      console.error('Error adding task:', error.message);
     }
   };
 
-  // Handle drag and drop functionality
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const { source, destination } = result;
@@ -133,7 +129,6 @@ const TodayChallenges = () => {
     }
   };
 
-  // Remove task
   const removeTask = async (id, column) => {
     const token = localStorage.getItem('access_token');
     try {
@@ -155,7 +150,6 @@ const TodayChallenges = () => {
     }
   };
 
-  // Handle special day task submission
   const handleSpecialDaySubmit = async () => {
     const token = localStorage.getItem('access_token');
     if (!specialDay.month || !specialDay.day || !specialDay.task) {
@@ -238,15 +232,13 @@ const TodayChallenges = () => {
                         <div className="mb-4">
                           <input
                             type="text"
-                            className="w-full p-2 border border-gray-300 rounded-md"
-                            placeholder="Enter new task"
+                            placeholder="New task"
                             value={newTask}
                             onChange={(e) => setNewTask(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                            className="w-full p-2 border border-gray-300 rounded mb-2"
                           />
-                          <button
-                            onClick={addTask}
-                            className="mt-2 w-full bg-blue-500 text-white py-2 rounded-md"
-                          >
+                          <button onClick={addTask} className="bg-blue-600 text-white px-4 py-2 rounded w-full">
                             Add Task
                           </button>
                         </div>
@@ -255,16 +247,13 @@ const TodayChallenges = () => {
                         <Draggable key={task.id} draggableId={task.id.toString()} index={index}>
                           {(provided) => (
                             <div
-                              className="bg-gray-100 p-4 mb-2 rounded-lg flex justify-between items-center"
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
+                              className="bg-gray-100 border border-gray-300 rounded-md p-4 mb-2 flex justify-between items-center"
                             >
-                              <span className="text-gray-700">{task.title}</span>
-                              <button
-                                onClick={() => removeTask(task.id, column)}
-                                className="text-red-500"
-                              >
+                              <span>{task.title}</span>
+                              <button onClick={() => removeTask(task.id, column)} className="text-red-600">
                                 <FaTrashAlt />
                               </button>
                             </div>
@@ -280,57 +269,6 @@ const TodayChallenges = () => {
           </DragDropContext>
         </main>
       </div>
-
-      {showModal && (
-        <div className="fixed inset-0 bg-gray-700 bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-1/3">
-            <h3 className="text-2xl font-semibold text-blue-700 mb-4">Add Special Day</h3>
-            <input
-              type="text"
-              className="w-full p-2 mb-4 border border-gray-300 rounded-md"
-              placeholder="Task Title"
-              value={specialDay.task}
-              onChange={(e) => setSpecialDay({ ...specialDay, task: e.target.value })}
-            />
-            <select
-              className="w-full p-2 mb-4 border border-gray-300 rounded-md"
-              value={specialDay.month}
-              onChange={(e) => setSpecialDay({ ...specialDay, month: e.target.value })}
-            >
-              <option value="">Select Month</option>
-              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((month) => (
-                <option key={month} value={month}>
-                  {month}
-                </option>
-              ))}
-            </select>
-            <select
-              className="w-full p-2 mb-4 border border-gray-300 rounded-md"
-              value={specialDay.day}
-              onChange={(e) => setSpecialDay({ ...specialDay, day: e.target.value })}
-            >
-              <option value="">Select Day</option>
-              {Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0')).map((day) => (
-                <option key={day} value={day}>
-                  {day}
-                </option>
-              ))}
-            </select>
-            <button
-              className="bg-blue-500 text-white py-2 px-4 rounded-md"
-              onClick={handleSpecialDaySubmit}
-            >
-              Save Task
-            </button>
-            <button
-              className="bg-gray-500 text-white py-2 px-4 rounded-md mt-4"
-              onClick={() => setShowModal(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
