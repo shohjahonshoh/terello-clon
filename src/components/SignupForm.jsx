@@ -3,16 +3,17 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const SignupForm = () => {
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     username: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
   const [error, setError] = useState(null);
-  const [otpCode, setOtpCode] = useState(''); // OTP kod uchun holat
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [enteredOtp, setEnteredOtp] = useState('');
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -21,49 +22,89 @@ const SignupForm = () => {
     });
   };
 
+  const handleOtpChange = (e) => {
+    setEnteredOtp(e.target.value);
+    console.log('Otp:', e.target.value);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.password === formData.confirmPassword) {
       try {
-        const response = await axios.post('http://95.130.227.110:8000/api/auth/signup/', { 
-          username: formData.username, 
-          password: formData.password,
-          email: formData.email
-        });
-
-        if (response.status !== 201) {
-          throw new Error('API xatolik: ' + response.statusText);
-        }
-
-        console.log('Forma yuborildi:', response.data);
-
-        // API dan olingan OTP kodini saqlash
-        setOtpCode(response.data.otpCode);
-
-        // Modal oynasini ochish
-        setIsModalOpen(true);
-
-        // API dan login orqali token olish
-        const tokenResponse = await axios.post('http://95.130.227.110:8000/api/auth/login/', {
+        const response = await axios.post('http://95.130.227.110:8000/api/auth/signup/', {
+          email: formData.email,
           username: formData.username,
           password: formData.password,
         });
 
-        // Tokenni localStorage'ga saqlash
-        localStorage.setItem('access_token', tokenResponse.data.access);
-        console.log('Token saqlandi:', tokenResponse.data.access);
+        console.log('Signup muvaffaqiyatli:', response.data);
 
+        // OTP modalni ochish
+        setIsOtpModalOpen(true);
       } catch (error) {
-        setError(error.message);
+        console.error('Signup xatolik:', error.response || error.message);
+        setError(error.response?.data?.message || error.message);
       }
     } else {
       alert('Parollar mos kelmadi!');
     }
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    navigate('/login'); 
+  const handleOtpSubmit = async () => {
+    if (!enteredOtp || !formData.email) {
+      setError('Iltimos, email va OTP kodni kiriting!');
+      return;
+    }
+
+    // Ro'yxatdan o'tish paytidagi email bilan mosligini tekshirish
+    if (formData.email !== formData.email) {
+      setError('Kiritilgan email avval yuborilgan email bilan mos emas.');
+      return;
+    }
+
+    const requestData = {
+      email: formData.email,
+      otp: enteredOtp,
+    };
+
+    try {
+      const response = await fetch('http://95.130.227.110:8000/api/auth/register/confirm/', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error response:', errorData);
+
+        // Serverdan kelgan xabarni ko'rsatish
+        if (errorData.non_field_errors) {
+          setError(errorData.non_field_errors[0]);
+        } else {
+          setError(errorData.detail || 'Произошла ошибка на сервере.');
+        }
+        return;
+      }
+
+      const responseData = await response.json();
+      console.log('Response from server:', responseData);
+
+      // Muvaffaqiyatli javobni qayta ishlash
+      setIsOtpModalOpen(false);
+      setIsSuccessModalOpen(true);
+    } catch (error) {
+      console.error('Error message:', error.message);
+      setError('Произошла ошибка при отправке запроса.');
+    }
+  };
+
+  const handleSuccessClose = () => {
+    setIsSuccessModalOpen(false);
+    navigate('/login');
   };
 
   const isFormValid = formData.email && formData.password && formData.password === formData.confirmPassword;
@@ -73,52 +114,52 @@ const SignupForm = () => {
       <div className="bg-white p-8 rounded-lg max-w-sm w-full">
         <h2 className="text-2xl font-semibold text-center mb-6">Ro'yxatdan o'tish</h2>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
-        <form className='drop-shadow-xl' onSubmit={handleSubmit}>
+        <form className="drop-shadow-xl" onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-gray-700">Foydalanuvchi nomi:</label>
+            <label className="block text-white">Foydalanuvchi nomi:</label>
             <input
               type="text"
               name="username"
               value={formData.username}
               onChange={handleChange}
               placeholder="Foydalanuvchi nomini kiriting"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md"
+              className="w-full px-4 py-2 border bg-white border-gray-300 rounded-md"
               required
             />
           </div>
           <div className="mb-4">
-            <label className="block text-gray-700">Email:</label>
+            <label className="block text-white">Email:</label>
             <input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
               placeholder="Emailni kiriting"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md"
+              className="w-full px-4 py-2 border bg-white border-gray-300 rounded-md"
               required
             />
           </div>
           <div className="mb-4">
-            <label className="block text-gray-700">Parol:</label>
+            <label className="block text-white">Parol:</label>
             <input
               type="password"
               name="password"
-              placeholder="Parolni kiriting"
               value={formData.password}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md"
+              placeholder="Parolni kiriting"
+              className="w-full px-4 py-2 border bg-white border-gray-300 rounded-md"
               required
             />
           </div>
           <div className="mb-6">
-            <label className="block text-gray-700">Parolni tasdiqlash:</label>
+            <label className="block text-white">Parolni tasdiqlash:</label>
             <input
               type="password"
               name="confirmPassword"
-              placeholder="Parolni qayta kiriting"
               value={formData.confirmPassword}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md"
+              placeholder="Parolni qayta kiriting"
+              className="w-full px-4 py-2 border bg-white border-gray-300 rounded-md"
               required
             />
           </div>
@@ -137,17 +178,55 @@ const SignupForm = () => {
         </form>
       </div>
 
-      {/* Modal oynasi */}
-      {isModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white text-center p-6 rounded-lg shadow-lg max-w-sm w-full">
-            <h3 className="text-lg text-green-500 font-semibold mb-4"><i className="fa fa-check-circle" aria-hidden="true"></i>Successfull </h3>
-            <p>Regestrasiyadan muvofaqiyatli o'tdingiz!</p>
-            <div className="mt-4">
-              <button onClick={handleCloseModal} className="bg-blue-500 text-white py-2 px-4 rounded-md">
-                Yopish
+      {/* OTP Modal */}
+      {isOtpModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-slate-500 bg-opacity-50">
+          <div className="bg-white p-6 mt-24 rounded-lg shadow-lg max-w-sm w-full">
+            <h3 className="text-lg font-semibold mb-4">OTP Tasdiqlash</h3>
+            <p>Emailga yuborilgan kodni va emailni kiriting:</p>
+
+            {/* Editable Email Input */}
+            <div className="mb-4">
+              <label className="block text-white">Email:</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                className="w-full px-4 py-2 border bg-white border-gray-300 rounded-md"
+                placeholder="Emailni kiriting"
+              />
+            </div>
+
+            {/* OTP Input */}
+            <input
+              type="text"
+              value={enteredOtp}
+              onChange={handleOtpChange}
+              className="w-full px-4 py-2 border bg-white border-gray-300 rounded-md mt-4"
+              placeholder="OTP kod"
+            />
+            <div className="mt-4 flex justify-end">
+              <button onClick={handleOtpSubmit} className="bg-blue-500 text-white py-2 px-4 rounded-md">
+                Tasdiqlash
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {isSuccessModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
+            <h3 className="text-lg text-green-500 font-semibold mb-4">
+              <i className="fa fa-check-circle" aria-hidden="true"></i> Muvaffaqiyatli!
+            </h3>
+            <p>Ro‘yxatdan o‘tish muvaffaqiyatli yakunlandi!</p>
+            <button onClick={handleSuccessClose} className="bg-blue-500 text-white py-2 px-4 rounded-md mt-4">
+              Yopish
+            </button>
           </div>
         </div>
       )}
