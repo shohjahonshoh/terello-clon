@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
-  const [forgotPasswordUsername, setForgotPasswordUsername] = useState('');
+
+  const [email, setEmail] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [smsSent, setSmsSent] = useState(false);
-  const [resetToken, setResetToken] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');  // Store the email where OTP is sent
+  const [resetSuccess, setResetSuccess] = useState(false);  // Track if password reset was successful
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -20,10 +23,10 @@ const LoginPage = () => {
       setUsername(value);
     } else if (name === 'password') {
       setPassword(value);
-    } else if (name === 'forgotPasswordUsername') {
-      setForgotPasswordUsername(value);
-    } else if (name === 'resetToken') {
-      setResetToken(value);
+    } else if (name === 'email') {
+      setEmail(value);
+    } else if (name === 'otpCode') {
+      setOtpCode(value);
     } else if (name === 'newPassword') {
       setNewPassword(value);
     }
@@ -32,115 +35,64 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
       const response = await axios.post('http://95.130.227.110:8000/api/auth/login/', {
         username,
         password,
       });
-
       if (response.status === 200) {
-        const { access, refresh } = response.data; // Retrieve both access and refresh tokens
-        localStorage.setItem('access_token', access); // Store access token in localStorage
-        localStorage.setItem('refresh_token', refresh); // Store refresh token in localStorage
+        const { access, refresh } = response.data;
+        localStorage.setItem('access_token', access);
+        localStorage.setItem('refresh_token', refresh);
         console.log('Login Successful:', response.data);
-
-        navigate('/today-challenges'); // Redirect on success
+        navigate('/today-challenges');
       } else {
         throw new Error('Login failed');
       }
     } catch (error) {
-      setError(error.response?.data?.detail || error.message); // Improved error handling
+      setError(error.response?.data?.detail || error.message);
     }
   };
 
+  // Step 1: Request OTP via Email
   const handleForgotPassword = async () => {
-    const refreshToken = localStorage.getItem('refresh_token'); // Get refresh token from localStorage
-    if (!refreshToken) {
-      setError('No refresh token found. Please log in again.');
-      return;
-    }
-
     try {
-      // Use refresh token to get new access token if expired
-      const response = await axios.post('http://95.130.227.110:8000/api/auth/token/refresh/', {
-        refresh: refreshToken,
+      const response = await axios.post('http://95.130.227.110:8000/api/auth/password_reset/', {
+        email: email,
       });
 
       if (response.status === 200) {
-        const newAccessToken = response.data.access;
-        localStorage.setItem('access_token', newAccessToken); // Store new access token in localStorage
-
-        // Now, make the password reset request
-        const passwordResetResponse = await fetch('http://95.130.227.110:8000/api/auth/password_reset', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${newAccessToken}`, // Use new access token for auth
-          },
-          body: JSON.stringify({ username: forgotPasswordUsername }),
-        });
-
-        if (!passwordResetResponse.ok) {
-          throw new Error('Password reset failed: ' + passwordResetResponse.statusText);
-        }
-
-        const data = await passwordResetResponse.json();
-        console.log('SMS sent:', data);
-        setSmsSent(true);
-        setShowResetPassword(true); // Show reset password form after SMS is sent
+        console.log('OTP sent to email:', response.data);
+        setOtpEmail(email);  // Store the email where OTP was sent
+        setOtpSent(true); // Show OTP input field
       } else {
-        throw new Error('Failed to refresh token');
+        throw new Error('Failed to send OTP');
       }
     } catch (error) {
-      setError(error.response?.data?.detail || error.message); // Improved error handling
+      setError(error.response?.data?.detail || error.message);
     }
   };
 
+  // Step 2: Confirm OTP and reset password
   const handleResetPassword = async () => {
-    const refreshToken = localStorage.getItem('refresh_token'); // Get refresh token from localStorage
-    if (!refreshToken) {
-      setError('No refresh token found. Please log in again.');
-      return;
-    }
-
     try {
-      // Use refresh token to get new access token if expired
-      const response = await axios.post('http://95.130.227.110:8000/api/auth/token/refresh/', {
-        refresh: refreshToken,
+      const response = await axios.post('http://95.130.227.110:8000/api/auth/password_reset/confirm/', {
+        email: otpEmail,   // Include email where OTP was sent
+        otp: otpCode,      // Include OTP code
+        new_password: newPassword, // Include new password
       });
-
+      
       if (response.status === 200) {
-        const newAccessToken = response.data.access;
-        localStorage.setItem('access_token', newAccessToken); // Store new access token in localStorage
-
-        // Send the reset token and new password to update the password
-        const resetResponse = await fetch('http://95.130.227.110:8000/api/auth/password_reset/confirm', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${newAccessToken}`, // Use new access token for auth
-          },
-          body: JSON.stringify({
-            token: resetToken,
-            password: newPassword,
-          }),
-        });
-
-        if (!resetResponse.ok) {
-          throw new Error('Password reset failed: ' + resetResponse.statusText);
-        }
-
-        const data = await resetResponse.json();
-        console.log('Password reset successful:', data);
-        setError(null);
+        console.log('Password reset successful:', response.data);
         alert('Your password has been reset successfully!');
-        navigate('/login'); // Redirect to login after successful password reset
+        setResetSuccess(true);  // Mark reset as successful
+        setOtpSent(false); // Hide OTP section
+        navigate('/login'); // Redirect to login page after successful password reset
       } else {
-        throw new Error('Failed to refresh token');
+        throw new Error('Password reset failed');
       }
     } catch (error) {
-      setError(error.response?.data?.detail || error.message); // Improved error handling
+      setError(error.response?.data?.detail || error.message);
     }
   };
 
@@ -162,7 +114,7 @@ const LoginPage = () => {
             type="text"
             name="username"
             placeholder="Enter your username"
-            className="border w-full p-2 rounded-md mb-4"
+            className="border w-full bg-white p-2 rounded-md mb-4"
             value={username}
             onChange={handleChange}
             required
@@ -175,7 +127,7 @@ const LoginPage = () => {
             type="password"
             name="password"
             placeholder="Enter your password"
-            className="border w-full p-2 rounded-md mb-4"
+            className="border w-full p-2 bg-white rounded-md mb-4"
             value={password}
             onChange={handleChange}
             required
@@ -190,26 +142,27 @@ const LoginPage = () => {
           </button>
         </form>
 
-        <div className="text-center mt-4">
+        <div className="text-center flex flex-col mt-4">
           <button
             onClick={() => setShowForgotPassword(!showForgotPassword)}
             className="text-blue-500 hover:underline"
           >
             Forgot Password?
           </button>
+          <Link to="/signup" className="text-red-500 hover:underline ml-2"><u className='text-black'>Regestration➡️</u> Sign-up</Link>
         </div>
 
-        {showForgotPassword && (
+        {showForgotPassword && !otpSent && (
           <div className="mt-4">
             <label className="block mb-2 text-sm font-medium">
-              Enter your username to reset password
+              Enter your email to reset password
             </label>
             <input
-              type="text"
-              name="forgotPasswordUsername"
-              placeholder="Enter your username"
+              type="email"
+              name="email"
+              placeholder="Enter your email"
               className="border w-full p-2 rounded-md mb-4"
-              value={forgotPasswordUsername}
+              value={email}
               onChange={handleChange}
               required
             />
@@ -217,27 +170,34 @@ const LoginPage = () => {
               onClick={handleForgotPassword}
               className="w-full py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600"
             >
-              Reset Password via SMS
+              Send OTP to Email
             </button>
-            {smsSent && (
-              <div className="text-center mt-2 text-green-500">
-                Password reset instructions have been sent via SMS.
-              </div>
-            )}
           </div>
         )}
 
-        {showResetPassword && (
+        {otpSent && !resetSuccess && (
           <div className="mt-4">
             <label className="block mb-2 text-sm font-medium">
-              Enter the reset token
+              Enter your email to confirm OTP
+            </label>
+            <input
+              type="email"
+              name="email"
+              placeholder="Enter your email"
+              className="border w-full p-2 rounded-md mb-4"
+              value={otpEmail}  // The email where OTP was sent
+              onChange={handleChange}
+              required
+            />
+            <label className="block mb-2 text-sm font-medium">
+              Enter the OTP code
             </label>
             <input
               type="text"
-              name="resetToken"
-              placeholder="Enter your reset token"
+              name="otpCode"
+              placeholder="Enter your OTP code"
               className="border w-full p-2 rounded-md mb-4"
-              value={resetToken}
+              value={otpCode}
               onChange={handleChange}
               required
             />
@@ -259,6 +219,12 @@ const LoginPage = () => {
             >
               Reset Password
             </button>
+          </div>
+        )}
+
+        {resetSuccess && (
+          <div className="mt-4 text-green-500 text-center">
+            Your password has been successfully reset. Please log in with your new password.
           </div>
         )}
       </div>
